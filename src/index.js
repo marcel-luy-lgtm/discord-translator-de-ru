@@ -4,6 +4,7 @@ import { commandData, handleCommand } from './commands.js';
 import { isTranslateChannel } from './store.js';
 import { FLAGS, translate } from './translate.js';
 import { sessions } from './voice.js';
+import { budgetNotice, isBudgetExceeded } from './budget.js';
 
 const client = new Client({
   intents: [
@@ -31,6 +32,12 @@ client.once(Events.ClientReady, async (c) => {
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || message.webhookId || !message.inGuild()) return;
   if (!message.content || !isTranslateChannel(message.guildId, message.channelId)) return;
+
+  if (isBudgetExceeded()) {
+    const notice = budgetNotice(message.channelId);
+    if (notice) await message.channel.send({ content: notice, allowedMentions: { parse: [] } }).catch(() => {});
+    return;
+  }
 
   try {
     const result = await translate(message.content);

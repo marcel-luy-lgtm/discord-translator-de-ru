@@ -16,6 +16,7 @@ import { config } from './config.js';
 import { FLAGS, translate } from './translate.js';
 import { SAMPLE_RATE, rms, stereoToMono, synthesize, transcribe } from './audio.js';
 import { getUsage } from './store.js';
+import { budgetNotice, isBudgetExceeded } from './budget.js';
 
 export const MODES = {
   text: 'Nur Text',
@@ -130,6 +131,12 @@ export class VoiceSession {
     const mono = stereoToMono(stereoPcm);
     const seconds = mono.length / 2 / SAMPLE_RATE;
     if (seconds < MIN_SECONDS || rms(mono) < MIN_RMS) return;
+
+    if (isBudgetExceeded()) {
+      const notice = budgetNotice(this.channel.id);
+      if (notice) this.sendText(notice).catch(() => {});
+      return;
+    }
 
     if (config.voiceDailyMinuteLimit > 0) {
       const usedMinutes = getUsage().day.sttSeconds / 60;

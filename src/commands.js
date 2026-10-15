@@ -12,6 +12,7 @@ import {
 } from './store.js';
 import { MODES, VoiceSession, sessions } from './voice.js';
 import { config } from './config.js';
+import { checkBudget, estimate, getLimits, setLimits } from './budget.js';
 
 const modeOption = (o) =>
   o
@@ -64,9 +65,17 @@ export const commandData = [
 
   new SlashCommandBuilder()
     .setName('kosten')
-    .setDescription('Geschätzte API-Kosten für heute und diesen Monat')
+    .setDescription('API-Kosten und Kostensperre')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .setContexts(0),
+    .setContexts(0)
+    .addSubcommand((s) => s.setName('anzeigen').setDescription('Geschätzte Kosten für heute und diesen Monat'))
+    .addSubcommand((s) =>
+      s
+        .setName('limit')
+        .setDescription('Kostensperre einstellen (0 = kein Limit)')
+        .addNumberOption((o) => o.setName('tag').setDescription('Max. USD pro Tag').setMinValue(0).setMaxValue(1000))
+        .addNumberOption((o) => o.setName('monat').setDescription('Max. USD pro Monat').setMinValue(0).setMaxValue(10000)),
+    ),
 ].map((c) => c.toJSON());
 
 const reply = (interaction, content) =>
@@ -160,36 +169,63 @@ async function handleVoice(interaction) {
   return interaction.editReply(`✅ Ich übersetze jetzt in ${channel}. Modus: **${MODES[mode]}**`);
 }
 
-// Richtwerte in USD (Stand 2026, bitte bei OpenAI prüfen): pro 1 Mio. Tokens bzw. pro Minute / 1 Mio. Zeichen
-const PRICES = {
-  inputPerMTok: 0.15,
-  outputPerMTok: 0.6,
-  sttPerMinute: 0.003,
-  ttsPerMChars: 12,
-};
-
-function estimate(u) {
-  const text = (u.inputTokens * PRICES.inputPerMTok + u.outputTokens * PRICES.outputPerMTok) / 1e6;
-  const stt = (u.sttSeconds / 60) * PRICES.sttPerMinute;
-  const tts = (u.ttsChars * PRICES.ttsPerMChars) / 1e6;
-  return { text, stt, tts, total: text + stt + tts };
+async function handleCosts(interaction) {
+  return interaction.options.getSubcommand() === 'limit' ? handleSetLimit(interaction) : handleShowCosts(interaction);
 }
 
-async function handleCosts(interaction) {
+const usd = (n) => `$${n.toFixed(2)}`;
+
+function limitLine(spent, limit) {
+  if (!limit) return 'kein Limit';
+  const pct = Math.min(100, (spent / limit) * 100);
+  const icon = spent >= limit ? '⛔' : pct >= 80 ? '⚠️' : '✅';
+  return `${icon} ${usd(spent)} von ${usd(limit)} (${pct.toFixed(0)} %)`;
+}
+
+async function handleShowCosts(interaction) {
   const { day, month, monthKey } = getUsage();
-  const fmt = (n) => `$${n.toFixed(2)}`;
-  const block = (label, u) => {
+  const limits = getLimits();
+  const block = (label, u, limit) => {
     const e = estimate(u);
     return (
-      `**${label}** – ca. ${fmt(e.total)}\n` +
-      `• Übersetzungen: ${u.messages} (${fmt(e.text)})\n` +
-      `• Sprache erkannt: ${(u.sttSeconds / 60).toFixed(1)} Min. (${fmt(e.stt)})\n` +
-      `• Vorgelesen: ${u.ttsChars} Zeichen (${fmt(e.tts)})`
+      `**${label}** – ${limitLine(e.total, limit)}\n` +
+      `• Übersetzungen: ${u.messages} (${usd(e.text)})\n` +
+      `• Sprache erkannt: ${(u.sttSeconds / 60).toFixed(1)} Min. (${usd(e.stt)})\n` +
+      `• Vorgelesen: ${u.ttsChars} Zeichen (${usd(e.tts)})`
     );
   };
-  const limit = config.voiceDailyMinuteLimit ? `\nTageslimit Sprache: ${config.voiceDailyMinuteLimit} Min.` : '';
+  const status = checkBudget();
+  const head = status.blocked
+    ? `⛔ **Kostensperre aktiv** – ${status.period === 'month' ? 'Monatsbudget' : 'Tagesbudget'} erreicht. Ändern mit \`/kosten limit\`.\n\n`
+    : '';
+  const voiceLimit = config.voiceDailyMinuteLimit ? `\nTageslimit Sprache: ${config.voiceDailyMinuteLimit} Min.` : '';
   return reply(
     interaction,
-    `${block('Heute', day)}\n\n${block(`Monat ${monthKey}`, month)}${limit}\n-# Schätzung. Die genaue Abrechnung steht unter platform.openai.com/usage`,
+    `${head}${block('Heute', day, limits.daily)}\n\n${block(`Monat ${monthKey}`, month, limits.monthly)}${voiceLimit}\n` +
+      `-# Schätzung. Die genaue Abrechnung steht unter platform.openai.com/usage`,
+  );
+}
+
+async function handleSetLimit(interaction) {
+  if (config.botAdminIds.length && !config.botAdminIds.includes(interaction.user.id)) {
+    return reply(interaction, '❌ Nur Bot-Admins dürfen die Kostensperre ändern.');
+  }
+  const daily = interaction.options.getNumber('tag') ?? undefined;
+  const monthly = interaction.options.getNumber('monat') ?? undefined;
+  if (daily === undefined && monthly === undefined) {
+    const l = getLimits();
+    return reply(
+      interaction,
+      `Aktuelle Kostensperre: Tag **${l.daily ? usd(l.daily) : 'aus'}**, Monat **${l.monthly ? usd(l.monthly) : 'aus'}**.\n` +
+        'Ändern z. B. mit `/kosten limit tag:1 monat:15` (0 = kein Limit).',
+    );
+  }
+  setLimits({ daily, monthly });
+  const l = getLimits();
+  const status = checkBudget();
+  return reply(
+    interaction,
+    `✅ Kostensperre gespeichert: Tag **${l.daily ? usd(l.daily) : 'aus'}**, Monat **${l.monthly ? usd(l.monthly) : 'aus'}**.` +
+      (status.blocked ? '\n⛔ Das Budget ist damit bereits erreicht – Übersetzung bleibt pausiert.' : ''),
   );
 }

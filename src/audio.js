@@ -3,6 +3,7 @@ import { toFile } from 'openai';
 import { config } from './config.js';
 import { openai } from './translate.js';
 import { recordUsage } from './store.js';
+import { isBudgetExceeded } from './budget.js';
 
 export const SAMPLE_RATE = 48000;
 
@@ -60,6 +61,7 @@ const HALLUCINATIONS = [
 ];
 
 export async function transcribe(mono) {
+  if (isBudgetExceeded()) return '';
   const seconds = mono.length / 2 / SAMPLE_RATE;
   const res = await openai.audio.transcriptions.create({
     file: await toFile(monoToWav(mono), 'speech.wav', { type: 'audio/wav' }),
@@ -77,8 +79,9 @@ const TTS_INSTRUCTIONS = {
   ru: 'Говори естественно и в нормальном темпе по-русски, как переводчик в дружеской беседе.',
 };
 
-/** Liefert Ogg/Opus-Audio, das direkt in Discord abgespielt werden kann. */
+/** Liefert Ogg/Opus-Audio, das direkt in Discord abgespielt werden kann (null bei Kostensperre). */
 export async function synthesize(text, lang) {
+  if (isBudgetExceeded()) return null;
   const params = {
     model: config.ttsModel,
     voice: config.ttsVoice,

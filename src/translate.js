@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { config } from './config.js';
 import { recordUsage } from './store.js';
+import { isBudgetExceeded } from './budget.js';
 
 export const openai = new OpenAI({ apiKey: config.openaiApiKey });
 
@@ -22,7 +23,7 @@ Reply ONLY with JSON: {"source":"de"|"ru"|"other","translation":"..."}`;
  *   null, wenn nichts zu übersetzen ist.
  */
 export async function translate(text) {
-  if (!hasTranslatableContent(text)) return null;
+  if (!hasTranslatableContent(text) || isBudgetExceeded()) return null;
 
   const res = await openai.chat.completions.create({
     model: config.translateModel,

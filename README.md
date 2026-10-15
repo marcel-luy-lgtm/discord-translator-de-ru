@@ -20,7 +20,8 @@ Ein Discord-Bot, der Deutsch und Russisch in beide Richtungen übersetzt. Für �
 | `/voice start [modus]` | alle | Bot kommt in deinen Voice-Channel (Standard: Text) |
 | `/voice modus <modus>` | alle | Zwischen Text, Audio und Text + Audio umschalten |
 | `/voice stop` | alle | Bot verlässt den Channel. Er geht auch von selbst, wenn niemand mehr da ist. |
-| `/kosten` | Server verwalten | Geschätzte API-Kosten für heute und diesen Monat |
+| `/kosten anzeigen` | Server verwalten | Geschätzte Kosten für heute und diesen Monat und wie viel vom Budget verbraucht ist |
+| `/kosten limit [tag] [monat]` | Server verwalten (oder `BOT_ADMIN_IDS`) | Kostensperre in USD einstellen, `0` = kein Limit |
 
 ## Einrichtung
 
@@ -71,7 +72,20 @@ pm2 save && pm2 startup
 
 Stille kostet nichts. Abgerechnet wird nur, wenn jemand spricht.
 
-Als Kostenbremse transkribiert `VOICE_DAILY_MINUTE_LIMIT` (Standard: 180) höchstens so viele Minuten Sprache pro Tag. Den aktuellen Stand zeigt `/kosten`.
+### Kostensperre
+Der Bot schätzt bei jeder Anfrage die Kosten und hört auf zu übersetzen, sobald ein Budget erreicht ist:
+
+- **Tagesbudget** (Standard **2 $**): Am nächsten Tag (UTC) geht es automatisch weiter.
+- **Monatsbudget** (Standard **20 $**): Ab dem nächsten Monat geht es automatisch weiter.
+
+Ist die Sperre aktiv, postet der Bot in jedem betroffenen Channel **einmal** einen Hinweis auf Deutsch und Russisch. Danach ist er still, bis wieder Budget da ist.
+
+- **Einstellen:** im Betrieb mit `/kosten limit tag:1 monat:15`. Der Wert wird gespeichert und hat Vorrang vor der `.env`. `0` schaltet das jeweilige Limit ab.
+- **Rechte:** Mit `BOT_ADMIN_IDS` in der `.env` (deine Discord-User-ID) darfst nur du das Limit ändern.
+- **Stand prüfen:** `/kosten anzeigen` zeigt, wie viel verbraucht ist. Ab 80 % erscheint ein ⚠️.
+- **Zusätzlich für Voice:** `VOICE_DAILY_MINUTE_LIMIT` (Standard 180) begrenzt die Minuten Sprache pro Tag.
+
+> Die Sperre arbeitet mit **Schätzwerten**. Die Preise lassen sich bei Bedarf über `PRICE_*` in der `.env` anpassen. Als zweite Sicherung solltest du bei OpenAI unter *Settings → Limits* ein hartes Monatslimit setzen.
 
 ## Konfiguration (`.env`)
 
@@ -84,6 +98,10 @@ Als Kostenbremse transkribiert `VOICE_DAILY_MINUTE_LIMIT` (Standard: 180) höchs
 | `STT_MODEL` | `gpt-4o-mini-transcribe` | Modell für die Spracherkennung |
 | `TTS_MODEL` | `gpt-4o-mini-tts` | Modell für die Sprachausgabe |
 | `TTS_VOICE` | `alloy` | Stimme: alloy, ash, coral, echo, nova, onyx, sage, shimmer … |
+| `DAILY_BUDGET_USD` | `2` | Kostensperre pro Tag in USD (0 = aus) |
+| `MONTHLY_BUDGET_USD` | `20` | Kostensperre pro Monat in USD (0 = aus) |
+| `BOT_ADMIN_IDS` | leer | Nur diese User-IDs dürfen `/kosten limit` nutzen |
+| `PRICE_INPUT_PER_MTOK` usw. | Richtwerte | Preise für die Kostenschätzung, falls OpenAI sie ändert |
 | `VOICE_DAILY_MINUTE_LIMIT` | `180` | Höchstens so viele Minuten Sprache pro Tag (0 = unbegrenzt) |
 
 ## Hinweise

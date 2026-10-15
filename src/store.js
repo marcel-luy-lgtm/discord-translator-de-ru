@@ -4,7 +4,7 @@ import path from 'node:path';
 
 const FILE = path.resolve('data', 'store.json');
 
-let state = { guilds: {}, usage: {} };
+let state = { guilds: {}, usage: {}, settings: {} };
 try {
   state = { ...state, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) };
 } catch (err) {
@@ -70,4 +70,16 @@ export function recordUsage(delta) {
 
 export function getUsage() {
   return { month: bucket(monthKey()), day: bucket(dayKey()), monthKey: monthKey(), dayKey: dayKey() };
+}
+
+// --- Bot-weite Einstellungen (z. B. Kostensperre) ---
+
+export function getSetting(key) {
+  return state.settings[key];
+}
+
+export function setSetting(key, value) {
+  if (value === undefined || value === null) delete state.settings[key];
+  else state.settings[key] = value;
+  scheduleSave();
 }

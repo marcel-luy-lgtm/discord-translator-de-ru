@@ -76,7 +76,10 @@ export const commandData = [
         .addNumberOption((o) => o.setName('tag').setDescription('Max. USD pro Tag').setMinValue(0).setMaxValue(1000))
         .addNumberOption((o) => o.setName('monat').setDescription('Max. USD pro Monat').setMinValue(0).setMaxValue(10000)),
     ),
-].map((c) => c.toJSON());
+]
+  // Ohne Voice tauchen die /voice-Befehle gar nicht erst in Discord auf.
+  .filter((c) => config.voiceEnabled || c.name !== 'voice')
+  .map((c) => c.toJSON());
 
 const reply = (interaction, content) =>
   interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
@@ -86,6 +89,7 @@ export async function handleCommand(interaction) {
     case 'uebersetzen':
       return handleTranslateChannels(interaction);
     case 'voice':
+      if (!config.voiceEnabled) return reply(interaction, 'ℹ️ Die Sprachübersetzung ist auf diesem Bot ausgeschaltet.');
       return handleVoice(interaction);
     case 'kosten':
       return handleCosts(interaction);
@@ -198,7 +202,7 @@ async function handleShowCosts(interaction) {
   const head = status.blocked
     ? `⛔ **Kostensperre aktiv** – ${status.period === 'month' ? 'Monatsbudget' : 'Tagesbudget'} erreicht. Ändern mit \`/kosten limit\`.\n\n`
     : '';
-  const voiceLimit = config.voiceDailyMinuteLimit ? `\nTageslimit Sprache: ${config.voiceDailyMinuteLimit} Min.` : '';
+  const voiceLimit = config.voiceEnabled && config.voiceDailyMinuteLimit ? `\nTageslimit Sprache: ${config.voiceDailyMinuteLimit} Min.` : '';
   return reply(
     interaction,
     `${head}${block('Heute', day, limits.daily)}\n\n${block(`Monat ${monthKey}`, month, limits.monthly)}${voiceLimit}\n` +

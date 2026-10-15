@@ -16,6 +16,12 @@ function number(name, fallback) {
   return Number.isFinite(value) ? Math.max(0, value) : fallback;
 }
 
+/** Ja/Nein-Schalter aus der Umgebung lesen (true/1/ja/on). */
+function flag(name, fallback) {
+  const raw = process.env[name]?.trim();
+  return raw ? /^(1|true|yes|ja|on)$/i.test(raw) : fallback;
+}
+
 export const config = {
   discordToken: required('DISCORD_TOKEN'),
   openaiApiKey: required('OPENAI_API_KEY'),
@@ -29,5 +35,7 @@ export const config = {
   monthlyBudgetUsd: number('MONTHLY_BUDGET_USD', 20),
   // Nur diese Discord-User-IDs dürfen die Kostensperre ändern (kommagetrennt). Leer = alle mit "Server verwalten".
   botAdminIds: (process.env.BOT_ADMIN_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  // Sprach-/Video-Übersetzung ein- oder ausschalten. Aus = reiner Textübersetzer.
+  voiceEnabled: flag('VOICE_ENABLED', false),
   voiceDailyMinuteLimit: number('VOICE_DAILY_MINUTE_LIMIT', 180),
 };

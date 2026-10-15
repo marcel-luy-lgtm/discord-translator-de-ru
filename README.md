@@ -3,7 +3,7 @@
 Ein Discord-Bot, der Deutsch und Russisch in beide Richtungen übersetzt. Für Übersetzung, Spracherkennung und Sprachausgabe nutzt er die OpenAI-API.
 
 - **Text-Channels:** In freigeschalteten Channels wird jede Nachricht automatisch erkannt und als Antwort in die andere Sprache übersetzt.
-- **Sprach- und Video-Channels:** Der Bot hört zu und übersetzt das Gesprochene. Die Ausgabe ist umschaltbar:
+- **Sprach- und Video-Channels** (optional, standardmäßig **aus**, einschalten mit `VOICE_ENABLED=true`): Der Bot hört zu und übersetzt das Gesprochene. Die Ausgabe ist umschaltbar:
   - **Text:** Die Übersetzung erscheint im Chat des Voice-Channels, darunter klein das Original.
   - **Audio:** Der Bot spricht die Übersetzung.
   - **Text + Audio:** beides.
@@ -17,7 +17,7 @@ Ein Discord-Bot, der Deutsch und Russisch in beide Richtungen übersetzt. Für �
 | `/uebersetzen an [channel]` | Server verwalten | Auto-Übersetzung in einem Channel einschalten |
 | `/uebersetzen aus [channel]` | Server verwalten | Auto-Übersetzung ausschalten |
 | `/uebersetzen liste` | Server verwalten | Alle aktiven Channels anzeigen |
-| `/voice start [modus]` | alle | Bot kommt in deinen Voice-Channel (Standard: Text) |
+| `/voice start [modus]` *(nur mit `VOICE_ENABLED=true`)* | alle | Bot kommt in deinen Voice-Channel (Standard: Text) |
 | `/voice modus <modus>` | alle | Zwischen Text, Audio und Text + Audio umschalten |
 | `/voice stop` | alle | Bot verlässt den Channel. Er geht auch von selbst, wenn niemand mehr da ist. |
 | `/kosten anzeigen` | Server verwalten | Geschätzte Kosten für heute und diesen Monat und wie viel vom Budget verbraucht ist |
@@ -42,6 +42,8 @@ Der Zugang ist **unabhängig von ChatGPT Plus**. Ein privates Konto reicht:
    `https://discord.com/oauth2/authorize?client_id=CLIENT_ID&scope=bot+applications.commands&permissions=3214336`
 
 ### 3. Bot starten
+📖 **Ausführliche Anleitung für Einsteiger mit Test am PC und Dauerbetrieb auf VPS oder Raspberry Pi: [docs/HOSTING.md](docs/HOSTING.md)**
+
 Benötigt wird **Node.js 22.12 oder neuer**.
 
 ```bash
@@ -54,13 +56,7 @@ npm start
 
 Tipp: Mit `DEV_GUILD_ID` (der ID deines Servers) erscheinen die Slash-Befehle sofort. Ohne diese Angabe kann es bis zu einer Stunde dauern.
 
-Der Bot muss dauerhaft laufen, zum Beispiel auf einem kleinen VPS oder einem Raspberry Pi. Damit er nach einem Absturz oder Neustart automatisch weiterläuft, eignet sich [pm2](https://pm2.keymetrics.io/):
-
-```bash
-npm install -g pm2
-pm2 start src/index.js --name translator
-pm2 save && pm2 startup
-```
+Der Bot muss dauerhaft laufen, zum Beispiel auf einem kleinen VPS oder einem Raspberry Pi. Auf Linux richtet ihn `bash scripts/install-linux.sh` als Dienst mit Autostart ein.
 
 ## Kosten (Richtwerte, Stand 2026)
 
@@ -93,6 +89,7 @@ Ist die Sperre aktiv, postet der Bot in jedem betroffenen Channel **einmal** ein
 |---|---|---|
 | `DISCORD_TOKEN` | – | Bot-Token (Pflicht) |
 | `OPENAI_API_KEY` | – | OpenAI-Key (Pflicht) |
+| `VOICE_ENABLED` | `false` | Sprachübersetzung an/aus. Aus = reiner Textübersetzer, `/voice` wird ausgeblendet |
 | `DEV_GUILD_ID` | leer | Befehle nur auf diesem Server registrieren, dafür sofort sichtbar |
 | `TRANSLATE_MODEL` | `gpt-4o-mini` | Modell für die Übersetzung |
 | `STT_MODEL` | `gpt-4o-mini-transcribe` | Modell für die Spracherkennung |

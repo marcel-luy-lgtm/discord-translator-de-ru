@@ -11,13 +11,13 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent, // muss im Developer Portal aktiviert sein
-    GatewayIntentBits.GuildVoiceStates,
+    ...(config.voiceEnabled ? [GatewayIntentBits.GuildVoiceStates] : []),
   ],
   partials: [Partials.Channel],
 });
 
 client.once(Events.ClientReady, async (c) => {
-  console.log(`Eingeloggt als ${c.user.tag}`);
+  console.log(`Eingeloggt als ${c.user.tag} – Sprachübersetzung ${config.voiceEnabled ? 'AN' : 'AUS (nur Text)'}`);
   if (config.devGuildId) {
     const guild = await c.guilds.fetch(config.devGuildId);
     await guild.commands.set(commandData);

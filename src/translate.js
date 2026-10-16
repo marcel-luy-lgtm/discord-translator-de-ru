@@ -9,7 +9,8 @@ const RULES = `Rules:
 - Keep meaning, tone, slang and swearing; write naturally like a native speaker of the target language.
 - Translate short replies too ("да" -> "ja", "спс" -> "danke", "ok" stays "ok").
 - Keep Discord markdown, mentions (<@...>, <#...>, <@&...>), custom emojis (<:name:id>), emojis, URLs and code unchanged.
-- Do not translate personal names or gamer tags. Do not add explanations, notes or quotes.`;
+- Do not translate personal names or gamer tags. Do not add explanations, notes or quotes.
+- Earlier chat messages may be given as context. Use them ONLY to understand the situation and choose the right meaning of ambiguous words (e.g. "хозяйка" in a household context = "Hausfrau", not "Herrin"). Translate ONLY the message to translate.`;
 
 // Kyrillische Nachricht: Richtung steht fest (Russisch -> Deutsch), das Modell muss nichts entscheiden.
 const PROMPT_RU_TO_DE = `You translate chat messages of a Discord server from Russian into German.
@@ -28,10 +29,11 @@ Reply ONLY with JSON: {"source":"de"|"ru"|"other","translation":"..."}`;
 
 /**
  * Übersetzt Text zwischen Deutsch und Russisch (Richtung wird automatisch erkannt).
+ * @param {string[]} [context] vorherige Nachrichten ("Name: Text"), nur als Verständnishilfe
  * @returns {Promise<{source:'de'|'ru', target:'de'|'ru', translation:string} | null>}
  *   null, wenn nichts zu übersetzen ist.
  */
-export async function translate(text) {
+export async function translate(text, context = []) {
   if (!hasTranslatableContent(text)) return skip('kein übersetzbarer Text', text);
   if (isBudgetExceeded()) return null;
 
@@ -42,7 +44,7 @@ export async function translate(text) {
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: cyrillic ? PROMPT_RU_TO_DE : PROMPT_LATIN },
-      { role: 'user', content: text },
+      { role: 'user', content: buildUserMessage(text, context) },
     ],
   });
 
@@ -66,6 +68,14 @@ export async function translate(text) {
   if (translation.toLowerCase() === text.trim().toLowerCase()) return skip('Übersetzung identisch mit Original', text);
 
   return { source, target: source === 'de' ? 'ru' : 'de', translation };
+}
+
+function buildUserMessage(text, context) {
+  if (!context.length) return text;
+  return (
+    `Earlier messages in this chat (context only, do NOT translate):\n${context.join('\n')}\n\n` +
+    `Message to translate:\n${text}`
+  );
 }
 
 /** Überwiegend kyrillische Buchstaben -> Russisch. */

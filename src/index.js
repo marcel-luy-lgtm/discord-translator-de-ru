@@ -4,6 +4,7 @@ import { commandData, handleCommand } from './commands.js';
 import { isTranslateChannel } from './store.js';
 import { FLAGS, translate } from './translate.js';
 import { sessions } from './voice.js';
+import { getContext, rememberMessage } from './context.js';
 import { budgetNotice, isBudgetExceeded } from './budget.js';
 
 const client = new Client({
@@ -36,6 +37,12 @@ client.on(Events.MessageCreate, async (message) => {
   const content = message.content || message.messageSnapshots?.first()?.content || '';
   if (!content) return;
 
+  // Kontext holen, bevor die aktuelle Nachricht selbst gespeichert wird
+  const author = message.member?.displayName ?? message.author.username;
+  const repliedTo = await getRepliedTo(message);
+  const context = getContext(message.channelId, { repliedTo });
+  rememberMessage(message.channelId, { id: message.id, author, text: content, ts: message.createdTimestamp });
+
   if (isBudgetExceeded()) {
     const notice = budgetNotice(message.channelId);
     if (notice) await message.channel.send({ content: notice, allowedMentions: { parse: [] } }).catch(() => {});
@@ -43,7 +50,7 @@ client.on(Events.MessageCreate, async (message) => {
   }
 
   try {
-    const result = await translate(content);
+    const result = await translate(content, context);
     if (!result) return;
     const text = `${FLAGS[result.target]} ${result.translation}`;
     await message.reply({
@@ -54,6 +61,18 @@ client.on(Events.MessageCreate, async (message) => {
     console.error('[text] Übersetzung fehlgeschlagen:', err.message);
   }
 });
+
+/** Nachricht, auf die geantwortet wurde (für den Kontext), oder null. */
+async function getRepliedTo(message) {
+  if (!message.reference?.messageId) return null;
+  try {
+    const ref = await message.fetchReference();
+    if (!ref.content || ref.author.bot) return null;
+    return { id: ref.id, author: ref.member?.displayName ?? ref.author.username, text: ref.content };
+  } catch {
+    return null;
+  }
+}
 
 // --- Slash-Befehle ---
 client.on(Events.InteractionCreate, async (interaction) => {

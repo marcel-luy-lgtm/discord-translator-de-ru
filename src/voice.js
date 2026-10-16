@@ -42,6 +42,7 @@ export class VoiceSession {
     this.audioQueue = [];
     this.limitWarned = false;
     this.destroyed = false;
+    this.recent = []; // letzte Äußerungen als Kontext für die Übersetzung
   }
 
   async start() {
@@ -166,11 +167,15 @@ export class VoiceSession {
   async processUtterance(userId, mono) {
     const original = await transcribe(mono);
     if (!original) return null;
-    const translated = await translate(original);
-    if (!translated) return null;
 
     const member = await this.guild.members.fetch(userId).catch(() => null);
     const name = member?.displayName ?? 'Unbekannt';
+    const context = this.recent.slice(-5);
+    this.recent.push(`${name}: ${original.slice(0, 300)}`);
+    if (this.recent.length > 8) this.recent.shift();
+
+    const translated = await translate(original, context);
+    if (!translated) return null;
     const audio = this.mode === 'text' ? null : await synthesize(translated.translation, translated.target);
     return { name, original, ...translated, audio };
   }

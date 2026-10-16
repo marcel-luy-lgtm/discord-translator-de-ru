@@ -31,7 +31,10 @@ client.once(Events.ClientReady, async (c) => {
 // --- Text: Auto-Übersetzung in freigeschalteten Channels ---
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || message.webhookId || !message.inGuild()) return;
-  if (!message.content || !isTranslateChannel(message.guildId, message.channelId)) return;
+  if (!isTranslateChannel(message.guildId, message.channelId)) return;
+  // Weitergeleitete Nachrichten haben keinen eigenen Text, der steckt im Snapshot
+  const content = message.content || message.messageSnapshots?.first()?.content || '';
+  if (!content) return;
 
   if (isBudgetExceeded()) {
     const notice = budgetNotice(message.channelId);
@@ -40,7 +43,7 @@ client.on(Events.MessageCreate, async (message) => {
   }
 
   try {
-    const result = await translate(message.content);
+    const result = await translate(content);
     if (!result) return;
     const text = `${FLAGS[result.target]} ${result.translation}`;
     await message.reply({

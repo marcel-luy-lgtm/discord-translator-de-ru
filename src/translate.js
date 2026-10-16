@@ -5,16 +5,25 @@ import { isBudgetExceeded } from './budget.js';
 
 export const openai = new OpenAI({ apiKey: config.openaiApiKey });
 
-const SYSTEM_PROMPT = `You are the translator of a Discord server whose members speak German and Russian.
-Detect the language of the user's message:
-- German -> translate it into Russian.
-- Russian -> translate it into German.
-- Any other language, or nothing translatable (only emojis, links, numbers, names, "ok", "lol" ...) -> source "other".
-Rules:
+const RULES = `Rules:
 - Keep meaning, tone, slang and swearing; write naturally like a native speaker of the target language.
-- Keep Discord markdown, mentions (<@...>, <#...>, <@&...>), custom emojis (<:name:id>), URLs and code unchanged.
-- Do not translate personal names or gamer tags. Do not add explanations or notes.
-- If the message mixes both languages, translate everything into the language that is not dominant.
+- Translate short replies too ("да" -> "ja", "спс" -> "danke", "ok" stays "ok").
+- Keep Discord markdown, mentions (<@...>, <#...>, <@&...>), custom emojis (<:name:id>), emojis, URLs and code unchanged.
+- Do not translate personal names or gamer tags. Do not add explanations, notes or quotes.`;
+
+// Kyrillische Nachricht: Richtung steht fest (Russisch -> Deutsch), das Modell muss nichts entscheiden.
+const PROMPT_RU_TO_DE = `You translate chat messages of a Discord server from Russian into German.
+The message is written in Cyrillic (Russian, possibly with slang, typos or a few Ukrainian words). Always translate it into German.
+${RULES}
+Reply ONLY with JSON: {"translation":"..."}`;
+
+// Lateinische Schrift: Deutsch, transliteriertes Russisch ("privet, kak dela") oder etwas anderes.
+const PROMPT_LATIN = `You translate chat messages of a Discord server whose members speak German and Russian.
+The message is written in Latin letters. Decide what it is:
+- German -> translate into Russian (Cyrillic). source "de".
+- Russian written in Latin letters / transliteration (e.g. "privet, kak dela?", "spasibo", "davai") -> translate into German. source "ru".
+- Another language (e.g. English) or nothing translatable (only names, "ok", "lol", "xD", numbers) -> source "other", translation "".
+${RULES}
 Reply ONLY with JSON: {"source":"de"|"ru"|"other","translation":"..."}`;
 
 /**
@@ -23,14 +32,16 @@ Reply ONLY with JSON: {"source":"de"|"ru"|"other","translation":"..."}`;
  *   null, wenn nichts zu übersetzen ist.
  */
 export async function translate(text) {
-  if (!hasTranslatableContent(text) || isBudgetExceeded()) return null;
+  if (!hasTranslatableContent(text)) return skip('kein übersetzbarer Text', text);
+  if (isBudgetExceeded()) return null;
 
+  const cyrillic = isMostlyCyrillic(text);
   const res = await openai.chat.completions.create({
     model: config.translateModel,
     temperature: 0.2,
     response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: cyrillic ? PROMPT_RU_TO_DE : PROMPT_LATIN },
       { role: 'user', content: text },
     ],
   });
@@ -45,15 +56,29 @@ export async function translate(text) {
   try {
     parsed = JSON.parse(res.choices[0]?.message?.content ?? '');
   } catch {
-    return null;
+    return skip('ungültige Modell-Antwort', text);
   }
-  const source = parsed?.source;
+  const source = cyrillic ? 'ru' : parsed?.source;
   const translation = typeof parsed?.translation === 'string' ? parsed.translation.trim() : '';
-  if ((source !== 'de' && source !== 'ru') || !translation) return null;
+  if (source !== 'de' && source !== 'ru') return skip('weder Deutsch noch Russisch', text);
+  if (!translation) return skip('leere Übersetzung', text);
   // Modell hat nichts verändert -> keine Übersetzung posten
-  if (translation.toLowerCase() === text.trim().toLowerCase()) return null;
+  if (translation.toLowerCase() === text.trim().toLowerCase()) return skip('Übersetzung identisch mit Original', text);
 
   return { source, target: source === 'de' ? 'ru' : 'de', translation };
+}
+
+/** Überwiegend kyrillische Buchstaben -> Russisch. */
+export function isMostlyCyrillic(text) {
+  const cyr = (text.match(/\p{Script=Cyrillic}/gu) ?? []).length;
+  const lat = (text.match(/\p{Script=Latin}/gu) ?? []).length;
+  return cyr > 0 && cyr >= lat;
+}
+
+// Im Log steht nur der Grund und die Länge, nicht der Nachrichteninhalt.
+function skip(reason, text) {
+  console.log(`[translate] übersprungen (${reason}), ${text.length} Zeichen`);
+  return null;
 }
 
 /** Grober Vorfilter, damit z. B. reine Emojis/Links keine API-Kosten erzeugen. */

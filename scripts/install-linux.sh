@@ -30,8 +30,9 @@ npm ci --omit=dev
 # 3) .env anlegen (fragt Token und Key ab, falls noch keine .env existiert)
 if [ ! -f .env ]; then
   cp .env.example .env
-  read -rp "Discord-Bot-Token: " token
-  read -rp "OpenAI-API-Key: " key
+  # -s: Eingabe wird nicht angezeigt (Token/Key sollen nicht auf dem Bildschirm stehen)
+  read -rsp "Discord-Bot-Token (Eingabe unsichtbar): " token; echo
+  read -rsp "OpenAI-API-Key (Eingabe unsichtbar): " key; echo
   sed -i "s|^DISCORD_TOKEN=.*|DISCORD_TOKEN=$token|; s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$key|" .env
   chmod 600 .env
   echo "==> .env erstellt (weitere Einstellungen: nano $APP_DIR/.env)"
